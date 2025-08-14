@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  video-whisper-monitor:
+    build: .
+    container_name: video-whisper-monitor
+    restart: unless-stopped
+    volumes:
+      # 挂载下载目录，用于监控新视频文件
+      - ./downloads:/app/downloads
+      # 挂载临时音频目录
+      - ./temp_audio:/app/temp_audio
+      # 挂载配置文件
+      - ./config.json:/app/config.json:ro
+      # 挂载日志文件
+      - ./video_monitor.log:/app/video_monitor.log
+    environment:
+      - PYTHONUNBUFFERED=1
+    # 如果需要GPU支持，取消注释以下行
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

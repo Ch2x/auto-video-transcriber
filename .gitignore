@@ -133,3 +133,7 @@ temp_audio/
 downloads/
 *.log
 config.json
+
+# Docker
+.docker/
+docker-compose.override.yml

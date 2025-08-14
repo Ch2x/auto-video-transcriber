@@ -4,6 +4,35 @@
 
 ## 安装步骤
 
+### 方式一：Docker部署（推荐）
+
+1. 确保已安装Docker和Docker Compose
+
+2. 配置企业微信Webhook：
+   - 在企业微信群中添加机器人
+   - 获取Webhook URL
+   - 修改config.json中的wechat_webhook_url
+
+3. 启动服务：
+   ```bash
+   # Linux/Mac
+   chmod +x docker-run.sh
+   ./docker-run.sh
+   
+   # Windows
+   docker-run.bat
+   
+   # 或直接使用docker-compose
+   docker-compose up -d
+   ```
+
+4. 查看服务状态：
+   ```bash
+   docker-compose logs -f
+   ```
+
+### 方式二：本地Python环境
+
 1. 安装Python依赖：
 ```bash
 pip install -r requirements.txt
@@ -39,6 +68,34 @@ python start_monitor.py
 
 ## 使用方法
 
+### Docker方式
+1. 修改config.json中的企业微信Webhook URL
+2. 运行 `./docker-run.sh` (Linux/Mac) 或 `docker-run.bat` (Windows) 启动监控
+3. 将视频文件放入downloads目录测试
+
+### 本地Python方式
 1. 修改config.json中的企业微信Webhook URL
 2. 运行 `python start_monitor.py` 启动监控
 3. 将视频文件放入downloads目录测试
+
+## Docker常用命令
+
+```bash
+# 启动服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+
+# 查看服务状态
+docker-compose ps
+
+# 进入容器调试
+docker-compose exec video-whisper-monitor bash
+```
