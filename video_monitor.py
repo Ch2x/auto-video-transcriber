@@ -47,18 +47,67 @@ class VideoFileHandler(FileSystemEventHandler):
             'required_stable_checks': 3
         })
         
+        # 跟踪已处理和正在处理的文件
+        self.processed_files = set()  # 已完成处理的文件
+        self.processing_files = set()  # 正在处理中的文件
+        self.max_processed_files = config.get('max_processed_files_cache', 1000)  # 最大缓存数量
+        
     def on_created(self, event):
         if event.is_directory:
             return
             
         file_path = Path(event.src_path)
         if file_path.suffix.lower() in self.supported_formats:
-            logger.info(f"检测到新视频文件: {file_path}")
+            self._handle_video_file(file_path, "创建")
+    
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+            
+        file_path = Path(event.src_path)
+        if file_path.suffix.lower() in self.supported_formats:
+            self._handle_video_file(file_path, "修改")
+    
+    def _handle_video_file(self, file_path, event_type):
+        """统一处理视频文件事件"""
+        file_key = str(file_path.resolve())
+        
+        # 检查文件是否已经处理过或正在处理中
+        if file_key in self.processed_files:
+            logger.debug(f"文件已处理过，跳过: {file_path}")
+            return
+            
+        if file_key in self.processing_files:
+            logger.debug(f"文件正在处理中，跳过重复事件: {file_path}")
+            return
+        
+        logger.info(f"检测到{event_type}视频文件: {file_path}")
+        
+        # 标记为正在处理
+        self.processing_files.add(file_key)
+        
+        try:
             # 等待文件完全写入
             if self.wait_for_file_complete(file_path):
                 self.process_video(file_path)
+                # 标记为已处理
+                self.processed_files.add(file_key)
+                self._cleanup_processed_files_cache()
             else:
                 logger.warning(f"文件可能仍在写入，跳过处理: {file_path}")
+        finally:
+            # 从正在处理列表中移除
+            self.processing_files.discard(file_key)
+    
+    def _cleanup_processed_files_cache(self):
+        """清理已处理文件缓存，避免内存无限增长"""
+        if len(self.processed_files) > self.max_processed_files:
+            # 移除最旧的一半记录（简单的FIFO策略）
+            files_to_remove = len(self.processed_files) - self.max_processed_files // 2
+            files_list = list(self.processed_files)
+            for i in range(files_to_remove):
+                self.processed_files.discard(files_list[i])
+            logger.debug(f"清理已处理文件缓存，移除了 {files_to_remove} 条记录")
     
     def wait_for_file_complete(self, file_path):
         """等待文件写入完成

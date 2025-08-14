@@ -14,6 +14,7 @@
    - 修改config.json中的wechat_webhook_url
 
 3. 启动服务：
+
    ```bash
    # Linux/Mac
    chmod +x docker-run.sh
@@ -27,6 +28,7 @@
    ```
 
 4. 查看服务状态：
+
    ```bash
    docker-compose logs -f
    ```
@@ -34,6 +36,7 @@
 ### 方式二：本地Python环境
 
 1. 安装Python依赖：
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -48,6 +51,7 @@ pip install -r requirements.txt
    - 修改config.json中的wechat_webhook_url
 
 4. 启动监控服务：
+
 ```bash
 python start_monitor.py
 ```
@@ -61,6 +65,7 @@ python start_monitor.py
 - `whisper_device`: 运行设备 (cpu, cuda)
   - cpu: 使用CPU运行，自动使用float32计算类型
   - cuda: 使用GPU运行，自动使用float16计算类型（需要NVIDIA GPU支持）
+- `max_processed_files_cache`: 已处理文件缓存的最大数量，防止重复处理同一文件
 
 ## 注意事项
 
@@ -71,11 +76,13 @@ python start_monitor.py
 ## 使用方法
 
 ### Docker方式
+
 1. 修改config.json中的企业微信Webhook URL
 2. 运行 `./docker-run.sh` (Linux/Mac) 或 `docker-run.bat` (Windows) 启动监控
 3. 将视频文件放入downloads目录测试
 
 ### 本地Python方式
+
 1. 修改config.json中的企业微信Webhook URL
 2. 运行 `python start_monitor.py` 启动监控
 3. 将视频文件放入downloads目录测试
