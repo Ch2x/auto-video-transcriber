@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 创建必要的目录
-RUN mkdir -p downloads temp_audio
+RUN mkdir -p downloads temp_audio logs
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1

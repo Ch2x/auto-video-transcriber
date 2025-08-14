@@ -12,7 +12,7 @@ if [ ! -f "config.json" ]; then
 fi
 
 # 创建必要的目录
-mkdir -p downloads temp_audio
+mkdir -p downloads temp_audio logs
 
 # 使用 docker-compose 启动服务
 if command -v docker-compose &> /dev/null; then
@@ -31,6 +31,7 @@ echo "✅ 服务启动完成!"
 echo ""
 echo "📋 常用命令:"
 echo "  查看日志: docker-compose logs -f"
+echo "  查看日志文件: tail -f logs/video_monitor.log"
 echo "  停止服务: docker-compose down"
 echo "  重启服务: docker-compose restart"
 echo "  查看状态: docker-compose ps"

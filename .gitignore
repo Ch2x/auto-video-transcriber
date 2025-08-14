@@ -131,6 +131,7 @@ dmypy.json
 # Project specific
 temp_audio/
 downloads/
+logs/
 *.log
 config.json
 
