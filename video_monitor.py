@@ -70,18 +70,25 @@ class VideoFileHandler(FileSystemEventHandler):
     
     def _handle_video_file(self, file_path, event_type):
         """统一处理视频文件事件"""
-        file_key = str(file_path.resolve())
+        try:
+            # 获取文件的唯一标识（路径 + 大小 + 修改时间）
+            file_stat = file_path.stat()
+            file_key = f"{file_path.resolve()}_{file_stat.st_size}_{file_stat.st_mtime}"
+        except (OSError, FileNotFoundError):
+            logger.warning(f"无法获取文件信息，跳过: {file_path}")
+            return
         
         # 检查文件是否已经处理过或正在处理中
         if file_key in self.processed_files:
-            logger.debug(f"文件已处理过，跳过: {file_path}")
+            logger.info(f"文件已处理过，跳过: {file_path}")
             return
             
         if file_key in self.processing_files:
-            logger.debug(f"文件正在处理中，跳过重复事件: {file_path}")
+            logger.info(f"文件正在处理中，跳过重复事件: {file_path}")
             return
         
         logger.info(f"检测到{event_type}视频文件: {file_path}")
+        logger.debug(f"文件唯一标识: {file_key}")
         
         # 标记为正在处理
         self.processing_files.add(file_key)
@@ -92,6 +99,7 @@ class VideoFileHandler(FileSystemEventHandler):
                 self.process_video(file_path)
                 # 标记为已处理
                 self.processed_files.add(file_key)
+                logger.info(f"文件已标记为已处理: {file_path.name}")
                 self._cleanup_processed_files_cache()
             else:
                 logger.warning(f"文件可能仍在写入，跳过处理: {file_path}")
@@ -159,22 +167,37 @@ class VideoFileHandler(FileSystemEventHandler):
         return False
     
     def extract_audio(self, video_path):
-        """从视频中提取音频"""
+        """从视频中提取音频，优化中文语音识别"""
         try:
             audio_path = self.temp_audio_dir / f"{video_path.stem}.wav"
             
-            # 使用ffmpeg提取音频
+            # 优化的音频提取参数，更适合中文语音识别
             (
                 ffmpeg
                 .input(str(video_path))
-                .output(str(audio_path), acodec='pcm_s16le', ac=1, ar='16000')
+                .output(
+                    str(audio_path), 
+                    acodec='pcm_s16le',     # 16位PCM编码
+                    ac=1,                   # 单声道
+                    ar='16000',             # 16kHz采样率（Whisper推荐）
+                    af='highpass=f=80,lowpass=f=8000',  # 高通和低通滤波，保留语音频段
+                    **{'b:a': '256k'}       # 音频比特率
+                )
                 .overwrite_output()
-                .run(quiet=True)
+                .run(quiet=True, capture_stdout=True, capture_stderr=True)
             )
             
-            logger.info(f"音频提取完成: {audio_path}")
+            # 检查音频文件是否成功创建
+            if not audio_path.exists() or audio_path.stat().st_size == 0:
+                logger.error("音频提取失败：输出文件为空")
+                return None
+            
+            logger.info(f"音频提取完成: {audio_path} (大小: {audio_path.stat().st_size} bytes)")
             return audio_path
             
+        except ffmpeg.Error as e:
+            logger.error(f"FFmpeg音频提取失败: {e.stderr.decode() if e.stderr else str(e)}")
+            return None
         except Exception as e:
             logger.error(f"音频提取失败: {e}")
             return None
@@ -183,23 +206,91 @@ class VideoFileHandler(FileSystemEventHandler):
         """使用Faster-Whisper转录音频"""
         try:
             logger.info("开始语音识别...")
+            
+            # 从配置文件获取Whisper参数
+            whisper_opts = self.config.get('whisper_options', {})
+            language = self.config.get('whisper_language', 'zh')
+            
+            # 优化的中文语音识别参数
             segments, info = self.whisper_model.transcribe(
                 str(audio_path),
-                beam_size=5,
-                language="zh"  # 可以设置为None让模型自动检测
+                beam_size=whisper_opts.get('beam_size', 5),
+                language=language,
+                condition_on_previous_text=whisper_opts.get('condition_on_previous_text', True),
+                temperature=whisper_opts.get('temperature', 0.0),
+                compression_ratio_threshold=whisper_opts.get('compression_ratio_threshold', 2.4),
+                logprob_threshold=whisper_opts.get('logprob_threshold', -1.0),
+                no_speech_threshold=whisper_opts.get('no_speech_threshold', 0.6),
+                word_timestamps=whisper_opts.get('word_timestamps', True),
+                vad_filter=whisper_opts.get('vad_filter', True),
+                vad_parameters=dict(
+                    min_silence_duration_ms=500,  # 最小静音持续时间
+                    speech_pad_ms=400,            # 语音填充时间
+                )
             )
             
-            # 收集所有文本段落
-            transcript_text = ""
-            for segment in segments:
-                transcript_text += f"[{segment.start:.2f}s - {segment.end:.2f}s] {segment.text}\n"
+            logger.info(f"识别语言: {info.language} (置信度: {info.language_probability:.2f})")
+            logger.info(f"音频时长: {info.duration:.2f}秒")
             
-            logger.info("语音识别完成")
+            # 收集所有文本段落，优化格式
+            transcript_text = ""
+            total_segments = 0
+            
+            for segment in segments:
+                total_segments += 1
+                # 清理文本：去除多余空格，优化标点
+                clean_text = self._clean_chinese_text(segment.text)
+                
+                if clean_text.strip():  # 只添加非空文本
+                    # 格式化时间戳
+                    start_time = self._format_timestamp(segment.start)
+                    end_time = self._format_timestamp(segment.end)
+                    transcript_text += f"[{start_time} - {end_time}] {clean_text}\n"
+            
+            logger.info(f"语音识别完成，共识别 {total_segments} 个片段")
+            
+            if not transcript_text.strip():
+                logger.warning("未识别到有效语音内容")
+                return "未检测到清晰的语音内容"
+            
             return transcript_text.strip()
             
         except Exception as e:
             logger.error(f"语音识别失败: {e}")
             return None
+    
+    def _clean_chinese_text(self, text):
+        """清理和优化中文文本"""
+        import re
+        
+        if not text:
+            return ""
+        
+        # 去除多余的空格
+        text = re.sub(r'\s+', ' ', text.strip())
+        
+        # 优化中文标点符号
+        text = text.replace('，', '，')
+        text = text.replace('。', '。')
+        text = text.replace('？', '？')
+        text = text.replace('！', '！')
+        text = text.replace('：', '：')
+        text = text.replace('；', '；')
+        
+        # 移除英文标点前后的多余空格
+        text = re.sub(r'\s*([，。？！：；])\s*', r'\1', text)
+        
+        # 确保句子结尾有标点
+        if text and not text[-1] in '，。？！：；':
+            text += '。'
+        
+        return text
+    
+    def _format_timestamp(self, seconds):
+        """格式化时间戳为 MM:SS 格式"""
+        minutes = int(seconds // 60)
+        seconds = int(seconds % 60)
+        return f"{minutes:02d}:{seconds:02d}"
     
     def send_to_wechat(self, video_name, transcript):
         """发送结果到企业微信"""
@@ -230,6 +321,17 @@ class VideoFileHandler(FileSystemEventHandler):
     def process_video(self, video_path):
         """处理视频文件的完整流程"""
         try:
+            # 双重检查：确保文件没有被其他进程处理
+            try:
+                file_stat = video_path.stat()
+                file_key = f"{video_path.resolve()}_{file_stat.st_size}_{file_stat.st_mtime}"
+                if file_key in self.processed_files:
+                    logger.info(f"文件已在其他地方处理过，跳过: {video_path.name}")
+                    return
+            except (OSError, FileNotFoundError):
+                logger.warning(f"无法获取文件信息，跳过处理: {video_path}")
+                return
+            
             logger.info(f"开始处理视频: {video_path.name}")
             
             # 1. 提取音频
