@@ -59,6 +59,8 @@ python start_monitor.py
 - `supported_video_formats`: 支持的视频格式
 - `whisper_model`: Whisper模型大小 (tiny, base, small, medium, large)
 - `whisper_device`: 运行设备 (cpu, cuda)
+  - cpu: 使用CPU运行，自动使用float32计算类型
+  - cuda: 使用GPU运行，自动使用float16计算类型（需要NVIDIA GPU支持）
 
 ## 注意事项
 

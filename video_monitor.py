@@ -29,9 +29,13 @@ class VideoFileHandler(FileSystemEventHandler):
     def __init__(self, config):
         self.config = config
         self.supported_formats = config['supported_video_formats']
+        # 根据设备类型选择合适的计算类型
+        compute_type = "float32" if config['whisper_device'] == "cpu" else "float16"
+        
         self.whisper_model = WhisperModel(
             config['whisper_model'], 
-            device=config['whisper_device']
+            device=config['whisper_device'],
+            compute_type=compute_type
         )
         self.temp_audio_dir = Path(config['temp_audio_dir'])
         self.temp_audio_dir.mkdir(exist_ok=True)

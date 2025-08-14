@@ -16,7 +16,7 @@ services:
       - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
-    # 如果需要GPU支持，取消注释以下行
+    # 如果需要GPU支持，取消注释以下行并修改config.json中whisper_device为"cuda"
     # deploy:
     #   resources:
     #     reservations:
